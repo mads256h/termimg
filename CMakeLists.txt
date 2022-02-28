@@ -4,3 +4,4 @@ project(termimg)
 set(CMAKE_CXX_STANDARD 20)
 
 add_executable(termimg main.cpp)
+target_link_libraries(termimg X11 Imlib2)
