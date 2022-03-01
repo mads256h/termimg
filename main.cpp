@@ -159,17 +159,18 @@ int main(int argc, char* argv[]) {
         std::cout << pid << std::endl;
     }
 
+    Window term_window = 0;
+
     auto all_windows = get_all_windows(display);
     std::cout << "Printing windows..." << std::endl;
     for (auto window : all_windows){
         pid_t pid = get_window_pid(display, window);
         if(std::find(parent_pids.begin(), parent_pids.end(), pid) != parent_pids.end()) {
-            std::cout << std::dec << "Pid: " << pid << " Window: " << std::hex << window << std::endl;
+            std::cout << std::dec << "Pid: " << pid << " Window: " << std::hex << window << std::dec << std::endl;
+            term_window = window;
+            break;
         }
     }
-    std::cout << std::dec << "Count: " << all_windows.size() << std::endl;
-
-    return EXIT_SUCCESS;
 
 
     if (argc != 6) {
@@ -208,14 +209,25 @@ int main(int argc, char* argv[]) {
     std::cout << "Cropped width: " << width << " height: " << height << std::endl;
 
     const int screen = DefaultScreen(display);
-    Window window = XCreateSimpleWindow(
-            display,
-            RootWindow(display, screen),
-            x, y,
-            width, height,
-            1,
-            BlackPixel(display, screen),
-            WhitePixel(display, screen));
+    XSetWindowAttributes attributes;
+    attributes.event_mask = ExposureMask;
+    attributes.colormap = XCreateColormap(
+            display, XDefaultRootWindow(display),
+            XDefaultVisual(display, screen), AllocNone);
+    attributes.background_pixel = 0;
+    attributes.border_pixel = 0;
+    Window window = XCreateWindow(
+        display,
+        term_window,
+        x, y,
+        width, height,
+        1,
+        DefaultDepth(display, screen),
+        InputOutput,
+        XDefaultVisual(display, screen),
+        CWEventMask | CWBackPixel | CWColormap | CWBorderPixel,
+        &attributes
+    );
 
     Pixmap pixmap = XCreatePixmap(display, window, width, height, static_cast<unsigned int>(DefaultDepth(display, screen)));
     imlib_context_set_display(display);
