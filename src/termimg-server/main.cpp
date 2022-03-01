@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cstdint>
 #include <proc/readproc.h>
+#include <sys/epoll.h>
 
 #include "term.h"
 
@@ -114,23 +115,57 @@ int main(int argc, char* argv[]) {
 
     XSetWindowBackgroundPixmap(display, window, pixmap);
 
-    XSelectInput(display, window, ExposureMask | KeyPressMask);
-    XMapWindow(display, window);
 
-    while(true) {
-        XEvent event;
-        XNextEvent(display, &event);
+    int fd_xorg = XConnectionNumber(display);
 
-        if (event.type == KeyPress) {
-            if (event.xkey.keycode == 24)
-                break;
-        }
+    int fd_epoll = epoll_create(2);
+    if (fd_epoll < 0) {
+        perror("epoll_create");
+        return EXIT_FAILURE;
+    }
+    epoll_event xorg_event;
+    xorg_event.data.fd = fd_xorg;
+    xorg_event.events = EPOLLIN;
 
-        if (event.type == Expose){
-            std::cout << "Expose" << std::endl;
-        }
+    if (epoll_ctl(fd_epoll, EPOLL_CTL_ADD, fd_xorg, &xorg_event) != 0) {
+        perror("epoll_ctl fd_xorg");
+        return EXIT_FAILURE;
     }
 
+    XSelectInput(display, window, ExposureMask | KeyPressMask);
+    XMapWindow(display, window);
+    XFlush(display);
+
+    epoll_event events[10];
+
+    while(true) {
+        int nfds = epoll_wait(fd_epoll, events, 10, -1);
+        if (nfds < 0) {
+            perror("epoll_wait");
+            break;
+        }
+
+        for (int i = 0; i < nfds; ++i) {
+            auto event = events[i];
+            if (event.data.fd == fd_xorg) {
+                std::cout << "X event" << std::endl;
+                XEvent x_event;
+                XNextEvent(display, &x_event);
+
+                if (x_event.type == KeyPress) {
+                    if (x_event.xkey.keycode == 24)
+                        goto out;
+                }
+
+                if (x_event.type == Expose){
+                    std::cout << "Expose" << std::endl;
+                }
+            }
+        }
+    }
+    out:
+
+    close(fd_epoll);
     XFreePixmap(display, pixmap);
     imlib_free_image();
     XCloseDisplay(display);
