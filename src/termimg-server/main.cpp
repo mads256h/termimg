@@ -5,9 +5,12 @@
 #include <X11/extensions/XRes.h>
 #include <Imlib2.h>
 #include <cassert>
+#include <cstring>
 #include <cstdint>
 #include <proc/readproc.h>
 #include <sys/epoll.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 
 #include "term.h"
 
@@ -132,6 +135,32 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
+    int fd_ipc = socket(AF_UNIX, SOCK_DGRAM, 0);
+    if (fd_ipc < 0) {
+        perror("socket");
+        return EXIT_FAILURE;
+    }
+
+    struct sockaddr_un socket_address;
+    socket_address.sun_family = AF_UNIX;
+    const char socket_name[] = "/tmp/termimg";
+    strncpy(socket_address.sun_path, socket_name, sizeof(socket_address.sun_path));
+
+    if (bind(fd_ipc, reinterpret_cast<sockaddr*>(&socket_address), sizeof(socket_address)) != 0) {
+        perror("bind");
+        return EXIT_FAILURE;
+    }
+
+    epoll_event ipc_event;
+    ipc_event.data.fd = fd_ipc;
+    ipc_event.events = EPOLLIN;
+
+    if (epoll_ctl(fd_epoll, EPOLL_CTL_ADD, fd_ipc, &ipc_event) != 0) {
+        perror("epoll_ctl fd_ipc");
+        return EXIT_FAILURE;
+    }
+
+
     XSelectInput(display, window, ExposureMask | KeyPressMask);
     XMapWindow(display, window);
     XFlush(display);
@@ -161,11 +190,30 @@ int main(int argc, char* argv[]) {
                     std::cout << "Expose" << std::endl;
                 }
             }
+            else if (event.data.fd == fd_ipc) {
+                std::cout << "IPC event" << std::endl;
+                char buf[256];
+                ssize_t bytes_read = read(fd_ipc, buf, sizeof(buf) - 1);
+                if (bytes_read < 0) {
+                    perror("read");
+                    return EXIT_FAILURE;
+                }
+
+                // Protect from read out of bounds data
+                buf[bytes_read + 1] = 0;
+
+                std::cout << buf << std::endl;
+            }
+            else {
+                std::cout << "IDK" << std::endl;
+            }
         }
     }
     out:
 
     close(fd_epoll);
+    close(fd_ipc);
+    unlink(socket_name);
     XFreePixmap(display, pixmap);
     imlib_free_image();
     XCloseDisplay(display);
