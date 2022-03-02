@@ -7,7 +7,6 @@
 #include <vector>
 #include <tuple>
 #include <optional>
-#include <iostream>
 #include <unistd.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/XRes.h>
