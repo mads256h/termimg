@@ -17,7 +17,7 @@
 
 #include "epoll.h"
 
-IPCServer::IPCServer(std::string path, Epoll &epoll) : m_path(std::move(path)) {
+IPCServer::IPCServer(std::string path, Epoll &epoll) : m_path(std::move(path)), m_epoll(epoll) {
     std::cout << m_path << std::endl;
     m_fd_socket = socket(AF_UNIX, SOCK_DGRAM, 0);
     if (m_fd_socket < 0) {
@@ -52,6 +52,7 @@ IPCServer::IPCServer(std::string path, Epoll &epoll) : m_path(std::move(path)) {
 }
 
 IPCServer::~IPCServer() {
+    m_epoll.unregister_fd(m_fd_socket);
     close(m_fd_socket);
     unlink(m_path.c_str());
 }

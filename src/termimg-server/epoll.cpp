@@ -4,7 +4,11 @@
 
 #include "epoll.h"
 
+#include <iostream>
+
 #include <cassert>
+#include <cstdio>
+
 #include <unistd.h>
 #include <sys/epoll.h>
 
@@ -17,6 +21,7 @@ Epoll::~Epoll() {
 }
 
 void Epoll::register_fd(int fd, std::function<void()> event_handler) {
+    std::cout << "Registering fd: " << fd << std::endl;
     m_event_handlers.insert({fd, event_handler});
 
     epoll_event new_event;
@@ -24,9 +29,19 @@ void Epoll::register_fd(int fd, std::function<void()> event_handler) {
     new_event.events = EPOLLIN;
 
     if (epoll_ctl(m_fd_epoll, EPOLL_CTL_ADD, fd, &new_event) != 0) {
-        // Do nothing right now
+        perror("epoll_ctl EPOLL_CTL_ADD");
         throw 1;
     }
+}
+
+void Epoll::unregister_fd(int fd) {
+    std::cout << "Unregistering fd: " << fd << std::endl;
+    if (epoll_ctl(m_fd_epoll, EPOLL_CTL_DEL, fd, nullptr) != 0) {
+        perror("epoll_ctl EPOLL_CTL_DEL");
+        throw 1;
+    }
+
+    m_event_handlers.erase(fd);
 }
 
 void Epoll::run_loop() const {

@@ -16,6 +16,8 @@ private:
     int m_fd_socket;
     const std::string m_path;
 
+    Epoll &m_epoll;
+
     std::function<void(const std::string_view)> m_message_handler;
 
 

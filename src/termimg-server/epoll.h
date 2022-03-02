@@ -24,6 +24,7 @@ public:
     ~Epoll();
 
     void register_fd(int fd, std::function<void()>);
+    void unregister_fd(int fd);
     void run_loop() const;
     void exit_loop();
 };
