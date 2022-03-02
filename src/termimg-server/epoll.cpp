@@ -25,10 +25,11 @@ void Epoll::register_fd(int fd, std::function<void()> event_handler) {
 
     if (epoll_ctl(m_fd_epoll, EPOLL_CTL_ADD, fd, &new_event) != 0) {
         // Do nothing right now
+        throw 1;
     }
 }
 
-void Epoll::run_loop() {
+void Epoll::run_loop() const {
     epoll_event events[max_events];
     while(!m_should_exit) {
         int ready_fds = epoll_wait(m_fd_epoll, events, sizeof(events) / sizeof(events[0]), -1);

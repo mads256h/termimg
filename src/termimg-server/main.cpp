@@ -1,6 +1,8 @@
 #include <iostream>
 #include <vector>
 #include <map>
+#include <exception>
+#include <string_view>
 #include <X11/Xlib.h>
 #include <X11/extensions/XRes.h>
 #include <Imlib2.h>
@@ -13,6 +15,7 @@
 
 #include "term.h"
 #include "epoll.h"
+#include "ipc-server.h"
 
 void print_usage(const char* argv0) {
     std::cerr << "USAGE: " << argv0 << ": <x> <y> <max_width> <max_height> <image>" << std::endl;
@@ -138,6 +141,7 @@ int main(int argc, char* argv[]) {
     });
 
 
+    /*
     int fd_ipc = socket(AF_UNIX, SOCK_DGRAM, 0);
     if (fd_ipc < 0) {
         perror("socket");
@@ -168,6 +172,13 @@ int main(int argc, char* argv[]) {
 
         std::cout << buf << std::endl;
     });
+     */
+
+    std::string path = "/tmp/termimg";
+    IPCServer ipc_server(path, epoll);
+    ipc_server.register_on_message_handler([](const std::string_view message) {
+        std::cout << message << std::endl;
+    });
 
 
     XSelectInput(display, window, ExposureMask | KeyPressMask);
@@ -176,8 +187,10 @@ int main(int argc, char* argv[]) {
 
     epoll.run_loop();
 
+    /*
     close(fd_ipc);
     unlink(socket_name);
+     */
     XFreePixmap(display, pixmap);
     imlib_free_image();
     XCloseDisplay(display);

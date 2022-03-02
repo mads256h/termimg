@@ -20,10 +20,11 @@ private:
 
 public:
     Epoll();
+    Epoll(Epoll&) = delete;
     ~Epoll();
 
     void register_fd(int fd, std::function<void()>);
-    void run_loop();
+    void run_loop() const;
     void exit_loop();
 };
 
