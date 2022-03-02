@@ -8,11 +8,11 @@
 #include <cstring>
 #include <cstdint>
 #include <proc/readproc.h>
-#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 
 #include "term.h"
+#include "epoll.h"
 
 void print_usage(const char* argv0) {
     std::cerr << "USAGE: " << argv0 << ": <x> <y> <max_width> <max_height> <image>" << std::endl;
@@ -121,19 +121,22 @@ int main(int argc, char* argv[]) {
 
     int fd_xorg = XConnectionNumber(display);
 
-    int fd_epoll = epoll_create(2);
-    if (fd_epoll < 0) {
-        perror("epoll_create");
-        return EXIT_FAILURE;
-    }
-    epoll_event xorg_event;
-    xorg_event.data.fd = fd_xorg;
-    xorg_event.events = EPOLLIN;
+    Epoll epoll;
+    epoll.register_fd(fd_xorg, [&]() {
+        std::cout << "X event" << std::endl;
+        XEvent x_event;
+        XNextEvent(display, &x_event);
 
-    if (epoll_ctl(fd_epoll, EPOLL_CTL_ADD, fd_xorg, &xorg_event) != 0) {
-        perror("epoll_ctl fd_xorg");
-        return EXIT_FAILURE;
-    }
+        if (x_event.type == KeyPress) {
+            if (x_event.xkey.keycode == 24)
+                epoll.exit_loop();
+        }
+
+        if (x_event.type == Expose){
+            std::cout << "Expose" << std::endl;
+        }
+    });
+
 
     int fd_ipc = socket(AF_UNIX, SOCK_DGRAM, 0);
     if (fd_ipc < 0) {
@@ -151,67 +154,28 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    epoll_event ipc_event;
-    ipc_event.data.fd = fd_ipc;
-    ipc_event.events = EPOLLIN;
+    epoll.register_fd(fd_ipc, [&]() {
+        std::cout << "IPC event" << std::endl;
+        char buf[256];
+        ssize_t bytes_read = read(fd_ipc, buf, sizeof(buf) - 1);
+        if (bytes_read < 0) {
+            perror("read");
+            return;
+        }
 
-    if (epoll_ctl(fd_epoll, EPOLL_CTL_ADD, fd_ipc, &ipc_event) != 0) {
-        perror("epoll_ctl fd_ipc");
-        return EXIT_FAILURE;
-    }
+        // Protect from read out of bounds data
+        buf[bytes_read + 1] = 0;
+
+        std::cout << buf << std::endl;
+    });
 
 
     XSelectInput(display, window, ExposureMask | KeyPressMask);
     XMapWindow(display, window);
     XFlush(display);
 
-    epoll_event events[10];
+    epoll.run_loop();
 
-    while(true) {
-        int nfds = epoll_wait(fd_epoll, events, 10, -1);
-        if (nfds < 0) {
-            perror("epoll_wait");
-            break;
-        }
-
-        for (int i = 0; i < nfds; ++i) {
-            auto event = events[i];
-            if (event.data.fd == fd_xorg) {
-                std::cout << "X event" << std::endl;
-                XEvent x_event;
-                XNextEvent(display, &x_event);
-
-                if (x_event.type == KeyPress) {
-                    if (x_event.xkey.keycode == 24)
-                        goto out;
-                }
-
-                if (x_event.type == Expose){
-                    std::cout << "Expose" << std::endl;
-                }
-            }
-            else if (event.data.fd == fd_ipc) {
-                std::cout << "IPC event" << std::endl;
-                char buf[256];
-                ssize_t bytes_read = read(fd_ipc, buf, sizeof(buf) - 1);
-                if (bytes_read < 0) {
-                    perror("read");
-                    return EXIT_FAILURE;
-                }
-
-                // Protect from read out of bounds data
-                buf[bytes_read + 1] = 0;
-
-                std::cout << buf << std::endl;
-            }
-            else {
-                std::cout << "IDK" << std::endl;
-            }
-        }
-    }
-    out:
-
-    close(fd_epoll);
     close(fd_ipc);
     unlink(socket_name);
     XFreePixmap(display, pixmap);
