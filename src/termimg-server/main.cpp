@@ -140,8 +140,8 @@ int main(int argc, char* argv[]) {
             XFlush(display);
         }
         else {
-            auto strs = split(message, " ");
-            if (strs.size() < 6) {
+            auto strs = split(message, "\n");
+            if (strs.size() != 6) {
                 std::cout << "Not enough arguments" << std::endl;
                 return;
             }
@@ -174,12 +174,7 @@ int main(int argc, char* argv[]) {
             if (max_width == 0) max_width = INT32_MAX;
             if (max_height == 0) max_height = INT32_MAX;
 
-            std::string path;
-            for (size_t i = 5; i < strs.size(); i++){
-                if (i != 5)
-                    path += " ";
-                path += strs[i];
-            }
+            std::string path = std::string(strs[5]);
 
 
             std::cout << "Got message with x: " << x << " y: " << y << " max_width: " << max_width << " max_height: " << max_height << " path: " << path << std::endl;
