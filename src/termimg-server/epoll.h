@@ -21,6 +21,7 @@ private:
 public:
     Epoll();
     Epoll(Epoll&) = delete;
+    Epoll(Epoll&&) = delete;
     ~Epoll();
 
     void register_fd(int fd, std::function<void()>);
