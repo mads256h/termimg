@@ -120,13 +120,11 @@ int main(int argc, char* argv[]) {
         XEvent x_event;
         XNextEvent(display, &x_event);
 
-        if (x_event.type == KeyPress) {
-            if (x_event.xkey.keycode == 24)
-                epoll.exit_loop();
-        }
-
         if (x_event.type == Expose){
             std::cout << "Expose" << std::endl;
+        }
+        else {
+            std::cout << "Unknown event" << std::endl;
         }
     });
 
@@ -229,7 +227,7 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    XSelectInput(display, window, ExposureMask | KeyPressMask);
+    XSelectInput(display, window, ExposureMask);
 
     epoll.run_loop();
 
