@@ -23,13 +23,6 @@
 #include <sys/stat.h>
 
 
-std::tuple<int, int> get_tty_size(int fd) {
-    winsize win_size{};
-    ioctl(fd, TIOCGWINSZ, &win_size);
-
-    return std::make_pair(win_size.ws_col, win_size.ws_row);
-}
-
 int get_pty(pid_t pid) {
     pid_t pids[] = {pid, 0};
     PROCTAB* proctab = openproc(PROC_FILLSTAT | PROC_PID, pids);
@@ -196,7 +189,7 @@ pid_t get_window_pid(Display *display, Window window) {
     return pid;
 }
 
-std::optional<std::tuple<pid_t, Window, int>> get_term(Display *display, pid_t parent) {
+std::optional<TerminalInfo> get_term(Display *display, pid_t parent) {
     auto parent_pids = get_parent_pids(parent);
 
     int fd_pty = 0;
@@ -215,7 +208,7 @@ std::optional<std::tuple<pid_t, Window, int>> get_term(Display *display, pid_t p
         pid_t pid = get_window_pid(display, window);
         if(std::find(parent_pids.begin(), parent_pids.end(), pid) != parent_pids.end()) {
             std::cerr << "pty is " << fd_pty << std::endl;
-            return std::make_tuple(pid, window, fd_pty);
+            return TerminalInfo{window, fd_pty};
         }
     }
 

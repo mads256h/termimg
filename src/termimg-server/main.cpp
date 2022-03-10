@@ -93,9 +93,9 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    auto [term_pid, term_window, pty] = optional_term_tuple.value();
+    const auto terminal_info = optional_term_tuple.value();
 
-    std::cerr << "Found terminal pid: " << term_pid << " window: " << std::hex << term_window << std::dec << " pty: " << pty << std::endl;
+    //std::cerr << "Found terminal pid: " << term_pid << " window: " << std::hex << term_window << std::dec << " pty: " << pty << std::endl;
 
 
 
@@ -109,7 +109,7 @@ int main(int argc, char* argv[]) {
     attributes.border_pixel = 0;
     Window window = XCreateWindow(
         display,
-        term_window,
+        terminal_info.terminal_window(),
         0, 0,
         50, 50,
         1,
@@ -172,10 +172,17 @@ int main(int argc, char* argv[]) {
                 return number;
             };
 
-            auto [columns, lines] = get_tty_size(pty);
+            const auto optional_winsize = terminal_info.get_tty_size();
+            if (!optional_winsize.has_value()) {
+                std::cerr << "Could not get tty size" << std::endl;
+                throw 1;
+            }
+            const auto &winsize = optional_winsize.value();
+            const auto columns = winsize.ws_col;
+            const auto lines = winsize.ws_row;
             std::cerr << "Terminal size x: " << columns << " y: " << lines << std::endl;
             XWindowAttributes attr {};
-            if (!XGetWindowAttributes(display, term_window, &attr)) {
+            if (!XGetWindowAttributes(display, terminal_info.terminal_window(), &attr)) {
                 std::cerr << "Could not get window attributes" << std::endl;
             }
             const int win_width = attr.width;

@@ -10,9 +10,9 @@
 #include <unistd.h>
 #include <X11/Xlib.h>
 
-std::tuple<int, int> get_tty_size(int fd);
+#include "terminal-info.h"
 
-std::optional<std::tuple<pid_t,Window,int>> get_term(Display *display, pid_t parent);
+std::optional<TerminalInfo> get_term(Display *display, pid_t parent);
 
 
 
