@@ -1,5 +1,6 @@
 #include <string>
 #include <sstream>
+#include <iostream>
 
 #include <cstdlib>
 #include <cstdio>
@@ -18,6 +19,8 @@ int main(int argc, char* argv[]) {
         ss << argv[i];
     }
     std::string message = ss.str();
+
+    std::cout << message << std::endl;
 
   int unix_socket = socket(AF_UNIX, SOCK_DGRAM, 0);
   if (unix_socket < 0) {

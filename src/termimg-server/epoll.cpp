@@ -21,7 +21,7 @@ Epoll::~Epoll() {
 }
 
 void Epoll::register_fd(int fd, std::function<void()> event_handler) {
-    std::cout << "Registering fd: " << fd << std::endl;
+    std::cerr << "Registering fd: " << fd << std::endl;
     m_event_handlers.insert({fd, event_handler});
 
     epoll_event new_event;
@@ -35,7 +35,7 @@ void Epoll::register_fd(int fd, std::function<void()> event_handler) {
 }
 
 void Epoll::unregister_fd(int fd) {
-    std::cout << "Unregistering fd: " << fd << std::endl;
+    std::cerr << "Unregistering fd: " << fd << std::endl;
     if (epoll_ctl(m_fd_epoll, EPOLL_CTL_DEL, fd, nullptr) != 0) {
         perror("epoll_ctl EPOLL_CTL_DEL");
         throw 1;

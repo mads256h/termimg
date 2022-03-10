@@ -4,17 +4,81 @@
 
 #include "term.h"
 
+#include <ranges>
 #include <vector>
 #include <tuple>
 #include <optional>
+#include <iostream>
+#include <sstream>
+
+#include <cstdio>
+
 #include <unistd.h>
+#include <fcntl.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/XRes.h>
 #include <proc/readproc.h>
+#include <sys/ioctl.h>
+#include <sys/sysmacros.h>
+#include <sys/stat.h>
 
-std::vector<pid_t> get_parent_pids(){
+
+std::tuple<int, int> get_tty_size(int fd) {
+    winsize win_size{};
+    ioctl(fd, TIOCGWINSZ, &win_size);
+
+    return std::make_pair(win_size.ws_col, win_size.ws_row);
+}
+
+int get_pty(pid_t pid) {
+    pid_t pids[] = {pid, 0};
+    PROCTAB* proctab = openproc(PROC_FILLSTAT | PROC_PID, pids);
+
+    proc_t* p = readproc(proctab, nullptr);
+
+    auto tty = static_cast<dev_t>(p->tty);
+    auto minor_tty = minor(tty);
+    std::cerr << "tty " << tty << " minor " << minor_tty << std::endl;
+
+    std::stringstream ss;
+    ss << "/dev/pts/" << minor_tty;
+
+    const auto path = ss.str();
+    if (minor_tty != 0) {
+        auto fd = open(path.c_str(), O_RDWR);
+        if (fd == -1) {
+            perror("open");
+        }
+        else {
+            return fd;
+        }
+    }
+
+    struct stat s{};
+    if (stat(path.c_str(), &s) == -1){
+        freeproc(p);
+
+        closeproc(proctab);
+        perror("stat");
+        std::cerr << "Could not find pty for " << pid << std::endl;
+        return -1;
+    }
+
+    freeproc(p);
+
+    closeproc(proctab);
+
+    if (tty == s.st_rdev) {
+        std::cerr << "Found pty for " << pid << " with tty: " << tty << std::endl;
+        return open(path.c_str(), O_RDWR);
+    }
+
+    return -1;
+}
+
+std::vector<pid_t> get_parent_pids(pid_t pid){
     std::vector<pid_t> parent_pids;
-    pid_t pid = getpid();
+    parent_pids.push_back(pid);
     while (pid != 1) {
         pid_t pids[] = {pid, 0};
         PROCTAB* proctab = openproc(PROC_FILLSTAT | PROC_PID, pids);
@@ -132,16 +196,29 @@ pid_t get_window_pid(Display *display, Window window) {
     return pid;
 }
 
-std::optional<std::tuple<pid_t, Window>> get_term(Display *display) {
-    auto parent_pids = get_parent_pids();
+std::optional<std::tuple<pid_t, Window, int>> get_term(Display *display, pid_t parent) {
+    auto parent_pids = get_parent_pids(parent);
+
+    int fd_pty = 0;
+
+    for (int & parent_pid : std::ranges::reverse_view(parent_pids)) {
+        std::cerr << parent_pid << std::endl;
+        auto p = get_pty(parent_pid);
+        if (p != -1) {
+            fd_pty = p;
+            break;
+        }
+    }
 
     auto all_windows = get_all_windows(display);
     for (auto window : all_windows){
         pid_t pid = get_window_pid(display, window);
         if(std::find(parent_pids.begin(), parent_pids.end(), pid) != parent_pids.end()) {
-            return std::make_tuple(pid, window);
+            std::cerr << "pty is " << fd_pty << std::endl;
+            return std::make_tuple(pid, window, fd_pty);
         }
     }
+
 
     return std::nullopt;
 }
