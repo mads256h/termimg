@@ -191,7 +191,7 @@ pid_t get_window_pid(Display *display, Window window) {
         }
     }
 
-    XFree(client_ids);
+    XResClientIdsDestroy(num_ids, client_ids);
 
     return pid;
 }
