@@ -12,10 +12,22 @@
 #include <Imlib2.h>
 
 #include <unistd.h>
+#include <csignal>
+#include <sys/signalfd.h>
 
 #include "term.h"
 #include "epoll.h"
 #include "ipc-server.h"
+
+const char* signal_to_string(uint32_t signal){
+    switch(signal) {
+        case SIGHUP: return "SIGHUP";
+        case SIGINT: return "SIGINT";
+        case SIGQUIT: return "SIGQUIT";
+        case SIGTERM: return "SIGTERM";
+        default: return "Unknown signal";
+    }
+}
 
 void print_usage(const char* argv0) {
     std::cerr << "USAGE: " << argv0 << ": <parent_pid>" << std::endl;
@@ -229,6 +241,7 @@ int main(int argc, char* argv[]) {
 
             if (pixmap != -1ul) {
                 XFreePixmap(display, pixmap);
+                pixmap = -1ul;
             }
 
             pixmap = XCreatePixmap(display, window, width, height, static_cast<unsigned int>(DefaultDepth(display, screen)));
@@ -251,11 +264,42 @@ int main(int argc, char* argv[]) {
         }
     });
 
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGHUP);
+    sigaddset(&mask, SIGINT);
+    sigaddset(&mask, SIGQUIT);
+    sigaddset(&mask, SIGTERM);
+
+    if (sigprocmask(SIG_BLOCK, &mask, 0) == -1) {
+        perror("sigprocmask");
+        return EXIT_FAILURE;
+    }
+
+    int fd_signal = signalfd(-1, &mask, 0);
+    if (fd_signal == -1) {
+        perror("signalfd");
+        return EXIT_FAILURE;
+    }
+
+    epoll.register_fd(fd_signal, [&]() {
+        struct signalfd_siginfo siginfo{};
+        if (read(fd_signal, &siginfo, sizeof(siginfo)) == -1) {
+            perror("read");
+            throw 1;
+        }
+
+        std::cerr << "Got signal " << signal_to_string(siginfo.ssi_signo) << std::endl;
+        epoll.exit_loop();
+    });
+
     XSelectInput(display, window, ExposureMask);
 
     epoll.run_loop();
 
-    XFreePixmap(display, pixmap);
+    if (pixmap != -1ul) {
+        XFreePixmap(display, pixmap);
+    }
     XCloseDisplay(display);
-    return 0;
+    return EXIT_SUCCESS;
 }
