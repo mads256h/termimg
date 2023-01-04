@@ -4,6 +4,7 @@
 #include <string_view>
 #include <charconv>
 #include <sstream>
+#include <memory>
 
 #include <cassert>
 #include <cstdint>
@@ -96,9 +97,9 @@ int main(int argc, char* argv[]) {
 
     pid_t parent_pid = std::stoi(argv[1]);
 
-    Display *display = XOpenDisplay(nullptr);
+    const std::shared_ptr<Display> display_ptr(XOpenDisplay(nullptr), [](Display* display) { XCloseDisplay(display); });
 
-    auto optional_term_tuple = get_term(display, parent_pid);
+    auto optional_term_tuple = get_term(display_ptr, parent_pid);
     if (!optional_term_tuple.has_value()) {
         std::cerr << "No terminal found!" << std::endl;
         sleep(100000);
@@ -111,34 +112,34 @@ int main(int argc, char* argv[]) {
 
 
 
-    const int screen = DefaultScreen(display);
+    const int screen = DefaultScreen(display_ptr.get());
     XSetWindowAttributes attributes;
     attributes.event_mask = ExposureMask;
     attributes.colormap = XCreateColormap(
-            display, XDefaultRootWindow(display),
-            XDefaultVisual(display, screen), AllocNone);
+            display_ptr.get(), XDefaultRootWindow(display_ptr.get()),
+            XDefaultVisual(display_ptr.get(), screen), AllocNone);
     attributes.background_pixel = 0;
     attributes.border_pixel = 0;
     Window window = XCreateWindow(
-        display,
+        display_ptr.get(),
         terminal_info.terminal_window(),
         0, 0,
         50, 50,
         1,
-        DefaultDepth(display, screen),
+        DefaultDepth(display_ptr.get(), screen),
         InputOutput,
-        XDefaultVisual(display, screen),
+        XDefaultVisual(display_ptr.get(), screen),
         CWEventMask | CWBackPixel | CWColormap | CWBorderPixel,
         &attributes
     );
 
 
-    int fd_xorg = XConnectionNumber(display);
+    int fd_xorg = XConnectionNumber(display_ptr.get());
 
     Epoll epoll;
     epoll.register_fd(fd_xorg, [&]() {
         XEvent x_event;
-        XNextEvent(display, &x_event);
+        XNextEvent(display_ptr.get(), &x_event);
 
         if (x_event.type == Expose){
             std::cerr << "Expose" << std::endl;
@@ -153,8 +154,8 @@ int main(int argc, char* argv[]) {
     IPCServer ipc_server("/tmp/termimg", epoll);
     ipc_server.register_on_message_handler([&](const std::string_view message) {
         if (message == "clear") {
-            XUnmapWindow(display, window);
-            XFlush(display);
+            XUnmapWindow(display_ptr.get(), window);
+            XFlush(display_ptr.get());
         }
         else if (message == "quit") {
             epoll.exit_loop();
@@ -194,7 +195,7 @@ int main(int argc, char* argv[]) {
             const auto lines = winsize.ws_row;
             std::cerr << "Terminal size x: " << columns << " y: " << lines << std::endl;
             XWindowAttributes attr {};
-            if (!XGetWindowAttributes(display, terminal_info.terminal_window(), &attr)) {
+            if (!XGetWindowAttributes(display_ptr.get(), terminal_info.terminal_window(), &attr)) {
                 std::cerr << "Could not get window attributes" << std::endl;
             }
             const int win_width = attr.width;
@@ -240,27 +241,27 @@ int main(int argc, char* argv[]) {
             std::cerr << "Cropped width: " << width << " height: " << height << std::endl;
 
             if (pixmap != -1ul) {
-                XFreePixmap(display, pixmap);
+                XFreePixmap(display_ptr.get(), pixmap);
                 pixmap = -1ul;
             }
 
-            pixmap = XCreatePixmap(display, window, width, height, static_cast<unsigned int>(DefaultDepth(display, screen)));
-            XResizeWindow(display, window, width, height);
-            XMoveWindow(display, window, x, y);
+            pixmap = XCreatePixmap(display_ptr.get(), window, width, height, static_cast<unsigned int>(DefaultDepth(display_ptr.get(), screen)));
+            XResizeWindow(display_ptr.get(), window, width, height);
+            XMoveWindow(display_ptr.get(), window, x, y);
 
-            imlib_context_set_display(display);
-            imlib_context_set_visual(DefaultVisual(display, screen));
-            imlib_context_set_colormap(DefaultColormap(display, screen));
+            imlib_context_set_display(display_ptr.get());
+            imlib_context_set_visual(DefaultVisual(display_ptr.get(), screen));
+            imlib_context_set_colormap(DefaultColormap(display_ptr.get(), screen));
             imlib_context_set_drawable(pixmap);
 
             imlib_render_image_on_drawable(0, 0);
             imlib_free_image();
 
-            XSetWindowBackgroundPixmap(display, window, pixmap);
-            XUnmapWindow(display, window);
-            XMapRaised(display, window);
-            XFlushGC(display, DefaultGC(display, screen));
-            XFlush(display);
+            XSetWindowBackgroundPixmap(display_ptr.get(), window, pixmap);
+            XUnmapWindow(display_ptr.get(), window);
+            XMapRaised(display_ptr.get(), window);
+            XFlushGC(display_ptr.get(), DefaultGC(display_ptr.get(), screen));
+            XFlush(display_ptr.get());
         }
     });
 
@@ -293,13 +294,13 @@ int main(int argc, char* argv[]) {
         epoll.exit_loop();
     });
 
-    XSelectInput(display, window, ExposureMask);
+    XSelectInput(display_ptr.get(), window, ExposureMask);
 
     epoll.run_loop();
 
     if (pixmap != -1ul) {
-        XFreePixmap(display, pixmap);
+        XFreePixmap(display_ptr.get(), pixmap);
     }
-    XCloseDisplay(display);
+
     return EXIT_SUCCESS;
 }

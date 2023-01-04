@@ -10,6 +10,7 @@
 #include <optional>
 #include <iostream>
 #include <sstream>
+#include <algorithm>
 
 #include <cstdio>
 
@@ -90,14 +91,14 @@ std::vector<pid_t> get_parent_pids(pid_t pid){
     return parent_pids;
 }
 
-bool has_property(Display* display, Window window, Atom atom){
+bool has_property(std::shared_ptr<Display> display, Window window, Atom atom){
     Atom actual_type_return;
     int actual_format_return;
     unsigned long nitems_return;
     unsigned long bytes_after_return;
     unsigned char* prop_return;
     int status = XGetWindowProperty(
-            display,
+            display.get(),
             window,
             atom,
             0L,
@@ -118,17 +119,17 @@ bool has_property(Display* display, Window window, Atom atom){
     return false;
 }
 
-void get_all_windows(Display* display, Window window, std::vector<Window> &windows) {
-    Atom wm_class = XInternAtom(display, "WM_CLASS", True);
-    Atom wm_name = XInternAtom(display, "WM_NAME", True);
-    Atom wm_locale_name = XInternAtom(display, "WM_LOCALE_NAME", True);
-    Atom wm_normal_hints = XInternAtom(display, "WM_NORMAL_HINTS", True);
+void get_all_windows(std::shared_ptr<Display> display, Window window, std::vector<Window> &windows) {
+    Atom wm_class = XInternAtom(display.get(), "WM_CLASS", True);
+    Atom wm_name = XInternAtom(display.get(), "WM_NAME", True);
+    Atom wm_locale_name = XInternAtom(display.get(), "WM_LOCALE_NAME", True);
+    Atom wm_normal_hints = XInternAtom(display.get(), "WM_NORMAL_HINTS", True);
 
     Window unused;
     Window *children;
     unsigned int children_count = 0;
     XQueryTree(
-            display,
+            display.get(),
             window,
             &unused,
             &unused,
@@ -156,14 +157,14 @@ void get_all_windows(Display* display, Window window, std::vector<Window> &windo
     }
 }
 
-std::vector<Window> get_all_windows(Display* display) {
+std::vector<Window> get_all_windows(std::shared_ptr<Display> display) {
     std::vector<Window> windows;
-    Screen *screen = XDefaultScreenOfDisplay(display);
+    Screen *screen = XDefaultScreenOfDisplay(display.get());
     get_all_windows(display, XRootWindowOfScreen(screen), windows);
     return windows;
 }
 
-pid_t get_window_pid(Display *display, Window window) {
+pid_t get_window_pid(std::shared_ptr<Display> display, Window window) {
     XResClientIdSpec client_spec;
     client_spec.client = window;
     client_spec.mask = XRES_CLIENT_ID_PID_MASK;
@@ -171,7 +172,7 @@ pid_t get_window_pid(Display *display, Window window) {
     XResClientIdValue *client_ids;
 
 
-    XResQueryClientIds(display, 1, &client_spec, &num_ids, &client_ids);
+    XResQueryClientIds(display.get(), 1, &client_spec, &num_ids, &client_ids);
 
     pid_t pid = 0;
     for (long i = 0; i < num_ids; ++i) {
@@ -189,7 +190,7 @@ pid_t get_window_pid(Display *display, Window window) {
     return pid;
 }
 
-std::optional<TerminalInfo> get_term(Display *display, pid_t parent) {
+std::optional<TerminalInfo> get_term(std::shared_ptr<Display> display, pid_t parent) {
     auto parent_pids = get_parent_pids(parent);
 
     int fd_pty = 0;
